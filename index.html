@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>고쟁 튜닝 체크</title>
+<title>고쟁 음정 체크</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;900&family=Noto+Sans+KR:wght@300;400;600&display=swap" rel="stylesheet">
@@ -271,8 +271,9 @@
 <body>
 
 <header>
-  <h1>고쟁 튜닝 체크</h1>
-  <div class="credit">Developed by PLO</div>
+  <h1>고쟁 음정 체크</h1>
+  <div class="credit">현재 본인의 고쟁 음(音)과 얼마나 유사한지 피아노 소리를 통해 비교하는 툴입니다.</div>
+  <div class="credit">Developed by Tarosu</div>
 </header>
 
 <div class="control-bar">
@@ -943,7 +944,7 @@
             alert(
               '마이크 권한이 꺼져 있어요.\n\n' +
               '웹 앱은 보안 정책상 스스로 설정 화면을 열 수 없어서, 아래 경로로 직접 이동해 허용해 주세요.\n\n' +
-              '• 안드로이드: 휴대폰 설정 › 앱 › 고쟁 튜닝 체크 › 권한 › 마이크 → 허용\n' +
+              '• 안드로이드: 휴대폰 설정 › 앱 › 고쟁 음정 체크 › 권한 › 마이크 → 허용\n' +
               '• iOS(홈 화면에 추가한 경우): 설정 › Safari(또는 사용 중인 브라우저) › 마이크 → 허용\n\n' +
               '한 번 허용해 두면 다음부터는 이 버튼을 누르는 즉시 팝업 없이 바로 튜닝이 시작돼요.'
             );
@@ -978,7 +979,7 @@
       if(err && err.name === 'NotAllowedError'){
         alert(
           '마이크 권한이 차단되어 있어요.\n\n' +
-          '안드로이드: 휴대폰 설정 › 앱 › 고쟁 튜닝 체크 › 권한 › 마이크 → 허용\n' +
+          '안드로이드: 휴대폰 설정 › 앱 › 고쟁 음정 체크 › 권한 › 마이크 → 허용\n' +
           'iOS: 설정 › Safari › 마이크 → 허용\n\n' +
           '허용 후 다시 눌러 주세요.'
         );
