@@ -878,14 +878,13 @@
   function autoCorrelate(buf, sampleRate){
     const SIZE = buf.length;
 
-    // 1) 진짜 무음인지 아주 낮은 기준으로만 걸러낸다 (기존보다 훨씬 민감하게)
+    // 1) 진짜 무음인지 걸러낸다 (원래 기준보다 약간만 더 민감하게)
     let peak = 0;
     for(let i = 0; i < SIZE; i++){ const a = Math.abs(buf[i]); if(a > peak) peak = a; }
-    if(peak < 0.0015) return -1;
+    if(peak < 0.006) return -1;
 
-    // 2) 자동 게인: 피크가 목표치(0.8)에 가깝도록 증폭해서, 작은 소리도
-    //    큰 소리와 동일한 민감도로 분석되게 만든다 (최대 25배까지).
-    const gain = Math.min(25, 0.8 / peak);
+    // 2) 자동 게인: 작은 소리를 살짝만 보정 (최대 6배까지) - 과하게 증폭하지 않음
+    const gain = Math.min(6, 0.8 / peak);
     const norm = new Float32Array(SIZE);
     for(let i = 0; i < SIZE; i++) norm[i] = buf[i] * gain;
 
