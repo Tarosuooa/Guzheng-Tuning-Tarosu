@@ -182,6 +182,7 @@
   }
   #tunerStatus{ color:var(--gold); font-weight:600; }
   #tunerCents{ font-variant-numeric:tabular-nums; }
+  #tunerFreq, #tunerCents{ display:none; }
 
   .tuner-hint{ font-size:11px; color:var(--string-dim); line-height:1.6; }
 
@@ -881,10 +882,10 @@
     // 1) 진짜 무음인지 걸러낸다 (원래 기준보다 약간만 더 민감하게)
     let peak = 0;
     for(let i = 0; i < SIZE; i++){ const a = Math.abs(buf[i]); if(a > peak) peak = a; }
-    if(peak < 0.006) return -1;
+    if(peak < 0.012) return -1;
 
-    // 2) 자동 게인: 작은 소리를 살짝만 보정 (최대 6배까지) - 과하게 증폭하지 않음
-    const gain = Math.min(6, 0.8 / peak);
+    // 2) 자동 게인: 작은 소리를 살짝만 보정 (최대 3배까지) - 과하게 증폭하지 않음
+    const gain = Math.min(3, 0.8 / peak);
     const norm = new Float32Array(SIZE);
     for(let i = 0; i < SIZE; i++) norm[i] = buf[i] * gain;
 
