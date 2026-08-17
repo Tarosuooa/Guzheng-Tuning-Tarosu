@@ -210,6 +210,8 @@
   #tunerFreq, #tunerCents{ display:none; }
 
   .tuner-hint{ font-size:11px; color:var(--string-dim); line-height:1.6; }
+  .tuner-hint .hint-label{ font-weight:800; color:var(--gold); }
+  .tuner-hint .hint-label-detected{ color:var(--teal); }
 
   .string{ touch-action:pan-y; } /* 세로 스크롤은 허용하고, 가로 스와이프는 JS가 직접 처리 */
 
@@ -298,9 +300,9 @@
 
 <header>
   <h1>고쟁 음정 체크 & 조율</h1>
-  <div class="credit">음정 체크: 현재 본인의 고쟁과 피아노 음(音)이 얼마나 유사한지 비교하는 툴입니다.</div>
-  <div class="credit">조율: 우측의 '조율'을 클릭하면 조율 창이 뜨며 조율 진행이 가능합니다.</div>
-  <div class="credit">Developed by Tarosu</div>
+  <div class="credit"><strong>음정 체크</strong>: 현재 본인의 고쟁과 피아노 음(音)이 얼마나 유사한지 비교하는 툴입니다.</div>
+  <div class="credit"><strong>조율</strong>: '조율' 버튼을 클릭하면 조율 창이 뜨며, 조율 진행이 가능합니다.</div>
+  <div class="credit">tarosu.ooa@gmail.com</div>
 </header>
 
 <div class="control-bar">
@@ -361,7 +363,11 @@
     <span id="tunerCents">-- ¢</span>
   </div>
 
-  <div class="tuner-hint">조율을 원하는 현을 선택한 후, 실물 고쟁 현을 뜯어 소리를 들려주세요.<br>주변 소리가 마이크로 들어가면 정확도가 떨어질 수 있어요.</div>
+  <div class="tuner-hint">
+    · <strong class="hint-label hint-label-detected">감지된 음</strong>: 대략 어떤 음인지 (=어떤 음에 가장 가까운지)<br>
+    · <strong class="hint-label">막대</strong>: 감지된 음 안에서의 정확도<br>
+    (주변 소리가 마이크로 들어가면 정확도가 떨어질 수 있어요)
+  </div>
 </div>
 
 <div class="instrument">
