@@ -555,6 +555,11 @@
   const tunerDetected = document.getElementById('tunerDetected');
   const btnResetDetected = document.getElementById('btnResetDetected');
   btnResetDetected.addEventListener('click', () => {
+    tunerNeedle.classList.remove('in-tune', 'close', 'off');
+    tunerNeedle.style.left = '50%';
+    tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
+    tunerFreq.textContent = '-- Hz';
+    tunerCents.textContent = '-- ¢';
     tunerDetected.textContent = '감지된 음: -';
   });
 
@@ -1002,12 +1007,9 @@
       const nearest = nearestPentatonicNote(freq, parseInt(keySelect.value, 10));
       tunerDetected.textContent = `감지된 음: ${SOLFEGE[nearest.degIdx]} (${midiToLabel(nearest.midi)})`;
     } else {
-      tunerNeedle.classList.remove('in-tune', 'close', 'off');
-      tunerNeedle.style.left = '50%';
-      tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
-      tunerFreq.textContent = '-- Hz';
-      tunerCents.textContent = '-- ¢';
-      // 감지된 음(tunerDetected)은 여기서 지우지 않는다 - 다음 소리가 잡히기 전까지 그대로 유지
+      // 소리가 끊겨도 바늘·상태·감지된 음을 초기화하지 않는다 -
+      // 마지막으로 감지된 상태를 그대로 유지하고, 새 소리가 잡히거나
+      // '초기화' 버튼을 누를 때만 바뀐다.
     }
 
     tunerRAF = requestAnimationFrame(tunerLoop);
