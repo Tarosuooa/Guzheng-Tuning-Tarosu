@@ -131,6 +131,16 @@
   }
   .toggle-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
 
+  #btnTuning{
+    background:var(--ink); color:#e7796a;
+    border:1px solid rgba(224,88,74,0.5);
+  }
+  #btnTuning:hover{ color:#ffb3a3; border-color:#e0584a; }
+  #btnTuning.active{
+    background:var(--lacquer); color:var(--cream); border-color:var(--lacquer);
+  }
+  #btnTuning:focus-visible{ outline:2px solid #e0584a; outline-offset:2px; }
+
   .tuner-panel{
     width:min(560px, 94vw);
     margin:0 0 22px;
@@ -150,6 +160,10 @@
   }
   .tuner-target-note{ font-size:16px; color:var(--cream); font-weight:600; }
   .tuner-target-freq{ font-size:12px; color:var(--string-dim); }
+  .tuner-detected{
+    font-size:13px; color:var(--teal); font-weight:600;
+    margin-bottom:14px; min-height:18px;
+  }
 
   .tuner-meter{ max-width:360px; margin:0 auto 12px; }
   .tuner-meter-track{
@@ -317,6 +331,7 @@
     <span class="tuner-target-note" id="tunerNote">C4</span>
     <span class="tuner-target-freq" id="tunerTargetFreq">261.6 Hz</span>
   </div>
+  <div class="tuner-detected" id="tunerDetected">감지된 음: -</div>
 
   <div class="tuner-meter">
     <div class="tuner-meter-track">
@@ -334,7 +349,7 @@
     <span id="tunerCents">-- ¢</span>
   </div>
 
-  <div class="tuner-hint">방향키로 목표 음을 고른 뒤, 실제 고쟁 현을 뜯어 소리를 들려주세요. 스피커 소리가 마이크로 다시 들어가면 정확도가 떨어질 수 있어요.</div>
+  <div class="tuner-hint">조율을 원하는 현을 선택한 후, 실물 고쟁 현을 뜯어 소리를 들려주세요.<br>주변 소리가 마이크로 들어가면 정확도가 떨어질 수 있어요.</div>
 </div>
 
 <div class="instrument">
@@ -394,61 +409,58 @@
 
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-  // Karplus-Strong plucked-string synthesis: a pick-position comb-filtered
-  // noise burst run through a delay-line loop filter. Single mono voice
-  // (no unison detune/chorus - keeps it sounding like one string, not a
-  // synth pad).
-  function buildVoice(sampleRate, freq, totalSamples, pluckPosRatio, damping){
-    const N = Math.max(2, Math.round(sampleRate / freq));
-    const pluckPos = Math.max(1, Math.round(N * pluckPosRatio));
+  // Additive piano voice: a stack of harmonics, each with its own decay time
+  // (highs die faster than the fundamental, like a real hammer-struck
+  // string), plus slight inharmonicity (stiff-string stretch) and a short
+  // filtered noise "hammer" transient at the very start. Single mono voice,
+  // random per-harmonic phase - no unison detune, no chorus/shimmer, so it
+  // reads as a dry acoustic strike rather than a synth pad.
+  const HARMONIC_AMPS = [1, 0.55, 0.30, 0.17, 0.10, 0.06, 0.035, 0.02];
+  const INHARMONICITY = 0.00018;
 
-    const noise = new Float32Array(N);
-    for(let i = 0; i < N; i++) noise[i] = Math.random() * 2 - 1;
-
-    const ring = new Float32Array(N);
-    for(let i = 0; i < N; i++){
-      const delayed = noise[(i - pluckPos + N) % N];
-      ring[i] = (noise[i] - delayed) * 0.5; // pick-position comb filter
-    }
-
+  function buildPianoVoice(sampleRate, freq, totalSamples, tauBase){
     const out = new Float32Array(totalSamples);
-    let prev = ring[N - 1];
-    for(let i = 0; i < totalSamples; i++){
-      const idx = i % N;
-      const current = ring[idx];
-      out[i] = current;
-      const avg = damping * 0.5 * (current + prev); // one-pole lowpass loop filter
-      ring[idx] = avg;
-      prev = avg;
+    const nyquistGuard = sampleRate * 0.45;
+
+    for(let h = 1; h <= HARMONIC_AMPS.length; h++){
+      const stretch = Math.sqrt(1 + INHARMONICITY * h * h);
+      const fh = freq * h * stretch;
+      if(fh > nyquistGuard) break;
+      const amp = HARMONIC_AMPS[h - 1];
+      const tauH = tauBase / (1 + (h - 1) * 0.32); // upper partials decay quicker - keeps it dry, not ringy
+      const w = 2 * Math.PI * fh / sampleRate;
+      const phase = Math.random() * Math.PI * 2;
+      for(let i = 0; i < totalSamples; i++){
+        out[i] += amp * Math.sin(w * i + phase) * Math.exp(-i / (tauH * sampleRate));
+      }
     }
+
+    // hammer strike: short, fairly hard noise burst at the very start of the note
+    const hammerSamples = Math.min(totalSamples, Math.floor(sampleRate * 0.018));
+    for(let i = 0; i < hammerSamples; i++){
+      out[i] += (Math.random() * 2 - 1) * 0.22 * Math.exp(-i / (hammerSamples * 0.3));
+    }
+
+    // fast attack ramp so the sine sum doesn't click on at full amplitude
+    const attackSamples = Math.max(1, Math.floor(sampleRate * 0.002));
+    for(let i = 0; i < attackSamples; i++) out[i] *= i / attackSamples;
+
     return out;
   }
 
-  // Without correction, a Karplus-Strong loop attenuates high notes far
-  // faster than low notes (the loop filter runs once per period, and short
-  // strings have far more periods per second). This solves for a per-note
-  // damping value so every string rings for roughly its intended duration.
-  function computeDamping(freq, tau, sampleRate){
-    const targetAmpPerSecond = Math.exp(-1 / tau);
-    const perLoopTarget = Math.pow(targetAmpPerSecond, 1 / freq);
-    const halfAngle = Math.PI * freq / sampleRate;
-    const cosTerm = Math.max(0.05, Math.cos(halfAngle));
-    return clamp(perLoopTarget / cosTerm, 0.80, 0.99995);
-  }
-
-  function guzhengBuffer(ctx, freq){
+  function pianoBuffer(ctx, freq){
     const key = Math.round(freq * 100);
     if(bufferCache[key]) return bufferCache[key];
 
     const sampleRate = ctx.sampleRate;
-    const tau = clamp(140 / freq, 1.0, 2.6); // ring time: longer for bass, shorter for treble
-    const duration = clamp(tau * 4.5, 3.0, 8.0);
+    // 서스테인을 거의 없애고, 타건 직후 바로 끊기는 퍼커시브한 소리로
+    const tauBase = clamp(60 / freq, 0.06, 0.22);
+    const duration = clamp(tauBase * 1.8, 0.12, 0.35);
     const totalSamples = Math.floor(duration * sampleRate);
-    const damping = computeDamping(freq, tau, sampleRate);
 
-    const voice = buildVoice(sampleRate, freq, totalSamples, 0.14, damping);
+    const voice = buildPianoVoice(sampleRate, freq, totalSamples, tauBase);
 
-    const fadeSamples = Math.max(1, Math.floor(totalSamples * 0.04));
+    const fadeSamples = Math.max(1, Math.floor(totalSamples * 0.08));
     const fadeStart = totalSamples - fadeSamples;
 
     const out = new Float32Array(totalSamples);
@@ -471,20 +483,20 @@
 
   function playNote(freq){
     const ctx = getAudioCtx();
-    const buffer = guzhengBuffer(ctx, freq);
+    const buffer = pianoBuffer(ctx, freq);
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
 
-    // remove sub-rumble
+    // remove sub-rumble so nothing reads as boomy/resonant
     const highpass = ctx.createBiquadFilter();
     highpass.type = 'highpass';
     highpass.frequency.value = 45;
 
-    // tame any harshness from the raw noise excitation
+    // tame any harshness above the audible piano range - no added ring, just a gentle cut
     const smooth = ctx.createBiquadFilter();
     smooth.type = 'lowpass';
-    smooth.frequency.value = 9000;
+    smooth.frequency.value = 8500;
     smooth.Q.value = 0.6;
 
     source.connect(highpass);
@@ -528,6 +540,7 @@
   const tunerStatus = document.getElementById('tunerStatus');
   const tunerFreq = document.getElementById('tunerFreq');
   const tunerCents = document.getElementById('tunerCents');
+  const tunerDetected = document.getElementById('tunerDetected');
 
   let tunerActive = false;
   let micStream = null;
@@ -928,6 +941,20 @@
     return sampleRate / period;
   }
 
+  // 감지된 주파수가 현재 장조의 오음계(도레미솔라) 중 어느 음에 가장 가까운지 찾는다.
+  // 목표음(선택된 현)과 무관하게, 순수하게 "지금 뜯은 현이 실제로 어떤 계이름에 가까운가"를 알려준다.
+  function nearestPentatonicNote(freq, rootOffset){
+    const midiFloat = 69 + 12 * Math.log2(freq / 440);
+    let best = null;
+    PENTATONIC.forEach((interval, degIdx) => {
+      const pc = ((rootOffset + interval) % 12 + 12) % 12;
+      const base = Math.round((midiFloat - pc) / 12) * 12 + pc;
+      const dist = Math.abs(midiFloat - base);
+      if(!best || dist < best.dist) best = { degIdx, midi: base, dist };
+    });
+    return best;
+  }
+
   function tunerLoop(){
     if(!tunerActive) return;
     analyser.getFloatTimeDomainData(tunerTimeData);
@@ -955,18 +982,31 @@
       tunerStatus.textContent = statusText;
       tunerFreq.textContent = freq.toFixed(1) + ' Hz';
       tunerCents.textContent = (cents > 0 ? '+' : '') + cents.toFixed(0) + ' ¢';
+
+      const nearest = nearestPentatonicNote(freq, parseInt(keySelect.value, 10));
+      tunerDetected.textContent = `감지된 음: ${SOLFEGE[nearest.degIdx]} (${midiToLabel(nearest.midi)})`;
     } else {
       tunerNeedle.classList.remove('in-tune', 'close', 'off');
       tunerNeedle.style.left = '50%';
       tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
       tunerFreq.textContent = '-- Hz';
       tunerCents.textContent = '-- ¢';
+      tunerDetected.textContent = '감지된 음: -';
     }
 
     tunerRAF = requestAnimationFrame(tunerLoop);
   }
 
   async function startTuner(){
+    // 마이크 연결/권한 여부와 상관없이 조율 창은 항상 먼저 연다
+    tunerActive = true;
+    btnTuning.classList.add('active');
+    btnTuning.textContent = '🎙 조율 중지';
+    tunerPanel.hidden = false;
+    updateTunerTarget();
+
+    const MIC_ISSUE_MSG = '마이크 연결 및 권한 수락 상태를 확인해 주세요';
+
     try{
       // 이미 차단된 상태면 getUserMedia를 다시 불러도 OS가 팝업을 띄우지 않으므로
       // Permissions API로 먼저 상태를 확인해 더 정확한 안내를 준다.
@@ -974,7 +1014,8 @@
         try{
           const status = await navigator.permissions.query({ name: 'microphone' });
           if(status.state === 'denied'){
-            alert('브라우저(크롬, 사파리 등)의 설정에서 마이크 권한을 수락하셔야 합니다.');
+            tunerStatus.textContent = MIC_ISSUE_MSG;
+            alert(MIC_ISSUE_MSG);
             return;
           }
         } catch(permErr){
@@ -995,20 +1036,12 @@
       tunerTimeData = new Float32Array(analyser.fftSize);
       micSource.connect(analyser); // destination에는 연결하지 않음 - 마이크 소리를 스피커로 내보내지 않음
 
-      tunerActive = true;
-      btnTuning.classList.add('active');
-      btnTuning.textContent = '🎙 조율 중지';
-      tunerPanel.hidden = false;
       tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
-      updateTunerTarget();
       tunerLoop();
     } catch(err){
-      if(err && err.name === 'NotAllowedError'){
-        alert('브라우저(크롬, 사파리 등)의 설정에서 마이크 권한을 수락하셔야 합니다.');
-      } else {
-        alert('브라우저(크롬, 사파리 등)의 설정에서 마이크 권한을 수락하셔야 합니다.');
-      }
-      tunerActive = false;
+      // 마이크 연결/권한에 문제가 있어도 조율 창은 열린 채로 두고, 안내 메시지만 보여준다
+      tunerStatus.textContent = MIC_ISSUE_MSG;
+      alert(MIC_ISSUE_MSG);
     }
   }
 
@@ -1023,6 +1056,7 @@
     btnTuning.classList.remove('active');
     btnTuning.textContent = '🎙 조율';
     tunerPanel.hidden = true;
+    tunerDetected.textContent = '감지된 음: -';
   }
 
   btnTuning.addEventListener('click', () => {
