@@ -142,6 +142,7 @@
   #btnTuning:focus-visible{ outline:2px solid #e0584a; outline-offset:2px; }
 
   .tuner-panel{
+    position:relative;
     width:min(560px, 94vw);
     margin:0 0 22px;
     background:linear-gradient(180deg, #2c170c, #1c0f07);
@@ -151,6 +152,16 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 24px rgba(0,0,0,0.4);
     text-align:center;
   }
+  .tuner-reset-btn{
+    position:absolute; top:12px; right:14px;
+    background:var(--ink); color:var(--string-dim);
+    border:1px solid rgba(201,162,39,0.35); border-radius:6px;
+    padding:4px 10px; font-family:'Noto Sans KR', sans-serif;
+    font-size:11px; font-weight:600; cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .tuner-reset-btn:hover{ color:var(--cream); border-color:var(--gold); }
+  .tuner-reset-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
   .tuner-target{
     display:flex; align-items:baseline; justify-content:center; gap:10px;
     margin-bottom:14px;
@@ -326,6 +337,7 @@
 </div>
 
 <div class="tuner-panel" id="tunerPanel" hidden>
+  <button type="button" class="tuner-reset-btn" id="btnResetDetected">초기화</button>
   <div class="tuner-target">
     <span class="tuner-target-solfege" id="tunerSolfege">도</span>
     <span class="tuner-target-note" id="tunerNote">C4</span>
@@ -541,6 +553,10 @@
   const tunerFreq = document.getElementById('tunerFreq');
   const tunerCents = document.getElementById('tunerCents');
   const tunerDetected = document.getElementById('tunerDetected');
+  const btnResetDetected = document.getElementById('btnResetDetected');
+  btnResetDetected.addEventListener('click', () => {
+    tunerDetected.textContent = '감지된 음: -';
+  });
 
   let tunerActive = false;
   let micStream = null;
@@ -991,7 +1007,7 @@
       tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
       tunerFreq.textContent = '-- Hz';
       tunerCents.textContent = '-- ¢';
-      tunerDetected.textContent = '감지된 음: -';
+      // 감지된 음(tunerDetected)은 여기서 지우지 않는다 - 다음 소리가 잡히기 전까지 그대로 유지
     }
 
     tunerRAF = requestAnimationFrame(tunerLoop);
