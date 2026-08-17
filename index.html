@@ -182,10 +182,6 @@
     background:linear-gradient(90deg, #e0584a 0%, #e0584a 15%, var(--gold) 15%, var(--gold) 40%, #3fbf6f 40%, #3fbf6f 60%, var(--gold) 60%, var(--gold) 85%, #e0584a 85%, #e0584a 100%);
     opacity:0.9;
   }
-  .tuner-meter-center-line{
-    position:absolute; left:50%; top:-4px; width:2px; height:18px;
-    background:var(--cream); opacity:0.6; transform:translateX(-1px);
-  }
   .tuner-meter-needle{
     position:absolute; top:-7px; left:50%; width:4px; height:24px;
     background:var(--cream); border-radius:2px;
@@ -347,7 +343,6 @@
 
   <div class="tuner-meter">
     <div class="tuner-meter-track">
-      <div class="tuner-meter-center-line"></div>
       <div class="tuner-meter-needle" id="tunerNeedle"></div>
     </div>
     <div class="tuner-meter-scale">
