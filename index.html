@@ -171,6 +171,10 @@
   }
   .tuner-target-note{ font-size:16px; color:var(--cream); font-weight:600; }
   .tuner-target-freq{ font-size:12px; color:var(--string-dim); }
+  .tuner-target-placeholder{
+    font-size:15px; color:var(--gold); font-weight:600;
+    margin-bottom:14px; line-height:1.5;
+  }
   .tuner-detected{
     font-size:13px; color:var(--teal); font-weight:600;
     margin-bottom:14px; min-height:18px;
@@ -334,11 +338,12 @@
 
 <div class="tuner-panel" id="tunerPanel" hidden>
   <button type="button" class="tuner-reset-btn" id="btnResetDetected">초기화</button>
-  <div class="tuner-target">
+  <div class="tuner-target" id="tunerTargetRow">
     <span class="tuner-target-solfege" id="tunerSolfege">도</span>
     <span class="tuner-target-note" id="tunerNote">C4</span>
     <span class="tuner-target-freq" id="tunerTargetFreq">261.6 Hz</span>
   </div>
+  <div class="tuner-target-placeholder" id="tunerTargetPlaceholder">조율을 원하시는 음의 현을 선택해 주세요</div>
   <div class="tuner-detected" id="tunerDetected">감지된 음: -</div>
 
   <div class="tuner-meter">
@@ -540,6 +545,8 @@
   // --- 튜너 DOM 참조 (refresh()가 처음 호출되기 전에 준비되어 있어야 함) ---
   const btnTuning = document.getElementById('btnTuning');
   const tunerPanel = document.getElementById('tunerPanel');
+  const tunerTargetRow = document.getElementById('tunerTargetRow');
+  const tunerTargetPlaceholder = document.getElementById('tunerTargetPlaceholder');
   const tunerSolfege = document.getElementById('tunerSolfege');
   const tunerNote = document.getElementById('tunerNote');
   const tunerTargetFreq = document.getElementById('tunerTargetFreq');
@@ -549,6 +556,7 @@
   const tunerCents = document.getElementById('tunerCents');
   const tunerDetected = document.getElementById('tunerDetected');
   const btnResetDetected = document.getElementById('btnResetDetected');
+  let tunerTargetPicked = false; // 조율 창을 연 뒤 사용자가 현을 직접 선택했는지 여부
   btnResetDetected.addEventListener('click', () => {
     tunerNeedle.classList.remove('in-tune', 'close', 'off');
     tunerNeedle.style.left = '50%';
@@ -556,6 +564,8 @@
     tunerFreq.textContent = '-- Hz';
     tunerCents.textContent = '-- ¢';
     tunerDetected.textContent = '감지된 음: -';
+    tunerTargetPicked = false;
+    updateTunerTarget();
   });
 
   let tunerActive = false;
@@ -777,6 +787,7 @@
     btn.classList.add('selected');
     btn.focus({preventScroll:true}); // keep real DOM focus in sync with the visual highlight
     btn.scrollIntoView({block:'nearest', behavior:'smooth'});
+    tunerTargetPicked = true;
     updateTunerTarget();
   }
   selectString(0);
@@ -900,6 +911,13 @@
 
   function updateTunerTarget(){
     if(!tunerSolfege) return; // guard: called before DOM refs exist during initial refresh()
+    if(!tunerTargetPicked){
+      tunerTargetRow.style.display = 'none';
+      tunerTargetPlaceholder.style.display = 'block';
+      return;
+    }
+    tunerTargetRow.style.display = 'flex';
+    tunerTargetPlaceholder.style.display = 'none';
     const degree = selectedIndex % 5;
     const midi = currentTargetMidi();
     tunerSolfege.textContent = SOLFEGE[degree];
@@ -1016,6 +1034,7 @@
     btnTuning.classList.add('active');
     btnTuning.textContent = '🎙 조율 중지';
     tunerPanel.hidden = false;
+    tunerTargetPicked = false; // 열 때마다 안내 문구부터 다시 보여줌
     updateTunerTarget();
 
     const MIC_ISSUE_MSG = '마이크 연결 및 권한 수락 상태를 확인해 주세요';
