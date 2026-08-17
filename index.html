@@ -780,17 +780,17 @@
   }
   refresh();
 
-  function selectString(i){
+  function selectString(i, userInitiated = true){
     stringEls[selectedIndex].btn.classList.remove('selected');
     selectedIndex = i;
     const btn = stringEls[selectedIndex].btn;
     btn.classList.add('selected');
     btn.focus({preventScroll:true}); // keep real DOM focus in sync with the visual highlight
     btn.scrollIntoView({block:'nearest', behavior:'smooth'});
-    tunerTargetPicked = true;
+    if(userInitiated) tunerTargetPicked = true;
     updateTunerTarget();
   }
-  selectString(0);
+  selectString(0, false);
   updateIdxDisplay();
 
   function pluck(i){
@@ -817,7 +817,7 @@
       btn.style.display = (stringMode === 14 && i < FOURTEEN_START) ? 'none' : 'flex';
     });
     updateIdxDisplay();
-    if(selectedIndex < lowerBound()) selectString(lowerBound());
+    if(selectedIndex < lowerBound()) selectString(lowerBound(), false);
   }
 
   // 왼쪽 숫자를 오음계 도수(1,2,3,5,6 반복)로, 옥타브는 숫자 위/아래 점으로 표시
