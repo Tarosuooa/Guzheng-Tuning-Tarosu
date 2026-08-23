@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>고쟁 음정 비교 & 조율</title>
+<title>고쟁 조율</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;900&family=Noto+Sans+KR:wght@300;400;600&display=swap" rel="stylesheet">
@@ -41,10 +41,6 @@
   }
 
   header{ text-align:center; margin-bottom:6px; }
-  .eyebrow{
-    letter-spacing:0.35em; font-size:11px; color:var(--gold);
-    text-transform:uppercase; margin-bottom:10px;
-  }
   h1{
     font-family:'Noto Serif KR', serif; font-weight:900;
     font-size:clamp(32px, 6vw, 54px); margin:0; color:var(--cream);
@@ -131,16 +127,6 @@
   }
   .toggle-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
 
-  #btnTuning{
-    background:var(--ink); color:#e7796a;
-    border:1px solid rgba(224,88,74,0.5);
-  }
-  #btnTuning:hover{ color:#ffb3a3; border-color:#e0584a; }
-  #btnTuning.active{
-    background:var(--lacquer); color:var(--cream); border-color:var(--lacquer);
-  }
-  #btnTuning:focus-visible{ outline:2px solid #e0584a; outline-offset:2px; }
-
   .tuner-panel{
     position:relative;
     width:min(560px, 94vw);
@@ -176,8 +162,8 @@
     margin-bottom:14px; line-height:1.5;
   }
   .tuner-detected{
-    font-size:13px; color:var(--teal); font-weight:600;
-    margin-bottom:14px; min-height:18px;
+    font-size:17px; color:var(--teal); font-weight:600;
+    margin-bottom:14px; min-height:20px;
   }
 
   .tuner-meter{ max-width:360px; margin:0 auto 12px; }
@@ -299,9 +285,8 @@
 <body>
 
 <header>
-  <h1>고쟁 음정 체크 & 조율</h1>
-  <div class="credit"><strong>음정 체크</strong>: 현재 본인의 고쟁과 피아노 음(音)이 얼마나 유사한지 비교하는 툴입니다.</div>
-  <div class="credit"><strong>조율</strong>: '조율' 버튼을 클릭하면 조율 창이 뜨며, 조율 진행이 가능합니다.</div>
+  <h1>고쟁 조율</h1>
+  <div class="credit">마이크를 허용한 뒤, 조율하려는 현을 선택하고 뜯어서 목표 음과 비교해 보세요.</div>
   <div class="credit">tarosu.ooa@gmail.com</div>
 </header>
 
@@ -330,15 +315,9 @@
       <button type="button" class="vol-preset-btn" data-vol="100">100%</button>
     </div>
   </div>
-  <div class="control-group">
-    <button type="button" id="btnMultiRun" class="toggle-btn">연속음 OFF</button>
-  </div>
-  <div class="control-group">
-    <button type="button" id="btnTuning" class="toggle-btn">🎙 조율</button>
-  </div>
 </div>
 
-<div class="tuner-panel" id="tunerPanel" hidden>
+<div class="tuner-panel" id="tunerPanel">
   <button type="button" class="tuner-reset-btn" id="btnResetDetected">초기화</button>
   <div class="tuner-target" id="tunerTargetRow">
     <span class="tuner-target-solfege" id="tunerSolfege">도</span>
@@ -408,6 +387,8 @@
     return midis;
   }
 
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
   // --- Audio ---
   const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
@@ -424,8 +405,6 @@
     if(audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
-
-  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
   // Additive piano voice: a stack of harmonics, each with its own decay time
   // (highs die faster than the fundamental, like a real hammer-struck
@@ -549,7 +528,6 @@
   if(isMobile) setVolume(50);
 
   // --- 튜너 DOM 참조 (refresh()가 처음 호출되기 전에 준비되어 있어야 함) ---
-  const btnTuning = document.getElementById('btnTuning');
   const tunerPanel = document.getElementById('tunerPanel');
   const tunerTargetRow = document.getElementById('tunerTargetRow');
   const tunerTargetPlaceholder = document.getElementById('tunerTargetPlaceholder');
@@ -570,6 +548,8 @@
     tunerFreq.textContent = '-- Hz';
     tunerCents.textContent = '-- ¢';
     tunerDetected.textContent = '감지된 음: -';
+    noteHoldPeakAmp = 0;
+    noteHoldText = null;
     tunerTargetPicked = false;
     updateTunerTarget();
   });
@@ -580,47 +560,14 @@
   let analyser = null;
   let tunerTimeData = null;
   let tunerRAF = null;
-
-  // --- 연속음(N회 다중 재생) 기능 ON/OFF ---
-  let multiRunEnabled = false;
-  const btnMultiRun = document.getElementById('btnMultiRun');
-  btnMultiRun.addEventListener('click', () => {
-    multiRunEnabled = !multiRunEnabled;
-    btnMultiRun.classList.toggle('active', multiRunEnabled);
-    btnMultiRun.textContent = multiRunEnabled ? '연속음 ON' : '연속음 OFF';
-  });
+  let noteHoldPeakAmp = 0; // 지금 울리고 있는 소리 중 지금까지 가장 컸던 진폭
+  let noteHoldText = null; // 그 가장 컸던 순간에 감지된 계이름 표시 텍스트
 
   // --- UI: build 21 strings, stacked vertically, top = string1 (도, lowest) ---
   const stringsEl = document.getElementById('strings');
   let tuning = buildTuning(parseInt(keySelect.value, 10));
   let selectedIndex = 0;
-  const semitoneOffsets = new Array(STRING_COUNT).fill(0); // per-string manual pitch-check adjustment
-
-  // 숫자키(또는 모바일 빠른 다중 탭) N회에 대응하는 오프셋 조합.
-  // 이 화면은 위쪽이 낮은 음, 아래쪽이 높은 음이라 "위"는 곧 음이 낮은 방향(-오프셋)이다.
-  // N~2: 선택음 기준 (N-1)칸 위쪽 현에서부터 시작해, 순서대로 내려오며 선택음에서 끝난다.
-  // 0은 10개짜리로 취급한다 (키보드에 10이 없어서 0으로 표기).
-  function buildRunOffsets(count){
-    const offs = [];
-    for(let k = count - 1; k >= 0; k--) offs.push(-k); // 예: count=3 -> [-2,-1,0]
-    return offs;
-  }
-  const RUN_OFFSETS_BY_COUNT = {};
-  for(let n = 2; n <= 9; n++) RUN_OFFSETS_BY_COUNT[n] = buildRunOffsets(n);
-  RUN_OFFSETS_BY_COUNT[0] = buildRunOffsets(10); // 위쪽 10개에서 시작해 선택음에서 끝남
-
-  const RUN_STEP_MS = 220; // 연속 재생 음 사이의 간격 (천천히 재생)
-
-  // 현재 선택된 현을 기준으로 주어진 오프셋들을(아래→위 순서로) 차례로 연주한다.
-  // 선택 상태(selectedIndex)는 바꾸지 않고 소리만 재생하며, 범위를 벗어나면 가장자리 값으로 고정한다.
-  function playNoteRun(offsets){
-    const lb = lowerBound();
-    const ub = STRING_COUNT - 1;
-    offsets.forEach((off, k) => {
-      const idx = Math.max(lb, Math.min(ub, selectedIndex + off));
-      setTimeout(() => pluck(idx), k * RUN_STEP_MS);
-    });
-  }
+  const semitoneOffsets = new Array(STRING_COUNT).fill(0); // per-string manual pitch adjustment
 
   // 14현 모드: 21현 중 위쪽 14개(기본 C장조 기준 미(E3)~도(C6))만 표시
   const FOURTEEN_START = 7; // 0-based index of string 8
@@ -681,11 +628,9 @@
       pluck(i);
     });
 
-    // --- 모바일: 좌우로 슬라이드하면 반음씩 조절, 짧게 탭하면 그대로 재생 ---
+    // --- 모바일: 탭하면 선택 후 재생, 좌우로 슬라이드하면 반음씩 조절 ---
     // touch identifier로 손가락을 구분해서 여러 현을 동시에 눌러도 서로 간섭하지 않도록 처리
-    let activeTouchId = null, touchStartX = 0, touchStartY = 0, appliedSteps = 0, isHorizontalSwipe = false, didSwipe = false;
-    let tapCount = 0, tapTimer = null;
-    const TAP_WINDOW_MS = 320; // 이 시간 안에 다시 탭하면 같은 다중 탭으로 취급
+    let activeTouchId = null, touchStartX = 0, touchStartY = 0, appliedSteps = 0, isHorizontalSwipe = false;
 
     function findTouch(touchList){
       for(let k = 0; k < touchList.length; k++){
@@ -702,7 +647,6 @@
       touchStartY = t.clientY;
       appliedSteps = 0;
       isHorizontalSwipe = false;
-      didSwipe = false;
       selectString(i);
     }, {passive:true});
 
@@ -723,10 +667,6 @@
         if(steps !== appliedSteps){
           adjustSemitone(i, steps - appliedSteps);
           appliedSteps = steps;
-          didSwipe = true;
-          // 스와이프로 전환되면 진행 중이던 다중 탭 카운트는 취소
-          tapCount = 0;
-          if(tapTimer){ clearTimeout(tapTimer); tapTimer = null; }
         }
       }
     }, {passive:false});
@@ -734,35 +674,14 @@
     function endTouch(e){
       if(activeTouchId === null) return;
       const t = findTouch(e.changedTouches);
-      if(!t) return;
-      e.preventDefault(); // 이 터치 시퀀스에 대한 합성 click을 항상 막고, 아래에서 직접 처리한다
-      if(!didSwipe && e.type === 'touchend'){
-        if(!multiRunEnabled){
-          // 연속음 기능이 꺼져 있으면, 몇 번을 두드리든 항상 그 음 하나만 즉시 재생
-          pluck(i);
-        } else {
-          // 짧은 시간 안에 몇 번 탭했는지 세어서, PC의 숫자키와 동일하게 재생한다 (최대 10회).
-          tapCount++;
-          if(tapTimer) clearTimeout(tapTimer);
-          tapTimer = setTimeout(() => {
-            const n = Math.min(tapCount, 10);
-            if(n === 1){
-              pluck(i);
-            } else {
-              const savedSelected = selectedIndex;
-              selectedIndex = i; // 이 현을 기준으로 오프셋 계산 (선택 하이라이트 자체는 바꾸지 않음)
-              playNoteRun(buildRunOffsets(n));
-              selectedIndex = savedSelected;
-            }
-            tapCount = 0;
-            tapTimer = null;
-          }, TAP_WINDOW_MS);
-        }
-      }
       activeTouchId = null;
+      if(!t) return;
+      if(!isHorizontalSwipe && e.type === 'touchend'){
+        pluck(i);
+      }
     }
-    btn.addEventListener('touchend', endTouch, {passive:false});
-    btn.addEventListener('touchcancel', endTouch, {passive:false});
+    btn.addEventListener('touchend', endTouch, {passive:true});
+    btn.addEventListener('touchcancel', endTouch, {passive:true});
   }
 
   function refresh(){
@@ -859,34 +778,14 @@
 
   function adjustSemitone(i, delta){
     semitoneOffsets[i] = clamp(semitoneOffsets[i] + delta, -12, 12);
-    refresh(); // 소리는 내지 않고 표시만 갱신 - 재생은 스페이스바로
+    refresh(); // 표시만 갱신
   }
 
-  // --- Keyboard: Up/Down select, Left/Right semitone adjust, Space play, 0,2~9=다중 연주 ---
-  const runFiredCodes = new Set();
-
+  // --- Keyboard: Up/Down 현 선택, Left/Right 반음 조절 ---
   document.addEventListener('keydown', (e) => {
     const active = document.activeElement;
     const isFormControl = active && (active.tagName === 'SELECT' || active.tagName === 'INPUT');
     if(isFormControl) return;
-
-    // e.code는 키보드 배치/언어/대소문자와 무관하게 물리적 키 위치를 가리킨다
-    const RUN_KEY_COUNT = { Digit0: 0, Numpad0: 0 };
-    for(let n = 2; n <= 9; n++){ RUN_KEY_COUNT['Digit' + n] = n; RUN_KEY_COUNT['Numpad' + n] = n; }
-
-    if(e.code in RUN_KEY_COUNT){
-      e.preventDefault();
-      if(!multiRunEnabled){
-        // 연속음 기능이 꺼져 있으면 숫자키는 선택음 1회 재생으로 대체
-        pluck(selectedIndex);
-        return;
-      }
-      if(!runFiredCodes.has(e.code)){
-        runFiredCodes.add(e.code);
-        playNoteRun(RUN_OFFSETS_BY_COUNT[RUN_KEY_COUNT[e.code]]);
-      }
-      return;
-    }
 
     if(e.key === 'ArrowDown'){
       e.preventDefault();
@@ -900,19 +799,23 @@
     } else if(e.key === 'ArrowRight'){
       e.preventDefault();
       adjustSemitone(selectedIndex, 1); // 올림 -> 붉은색
-    } else if(e.code === 'Space' || e.code === 'Digit1' || e.code === 'Numpad1'){
-      e.preventDefault();
-      pluck(selectedIndex);
     }
-  });
-
-  document.addEventListener('keyup', (e) => {
-    runFiredCodes.delete(e.code);
   });
 
   // --- 조율 테스트: 마이크로 실제 연주음을 잡아 선택된 목표음과 비교 ---
   function currentTargetMidi(){
     return tuning[selectedIndex] + semitoneOffsets[selectedIndex];
+  }
+
+  // 피치 검출이 옥타브를 잘못 잡는 경우(예: 실제로는 정확한 음인데 1옥타브 위/아래로 인식)를
+  // 방지하기 위해, 감지된 주파수를 목표음과 가장 가까운 옥타브로 강제로 접어서 맞춘다.
+  // (조율기는 이미 어떤 음을 조율하려는지 알고 있으므로, 그 정보를 이용해 옥타브 모호성을 없앤다)
+  function snapToNearestOctave(freq, targetFreq){
+    if(!(freq > 0) || !(targetFreq > 0)) return freq;
+    let f = freq;
+    while(f > targetFreq * Math.SQRT2) f /= 2;
+    while(f < targetFreq / Math.SQRT2) f *= 2;
+    return f;
   }
 
   function updateTunerTarget(){
@@ -933,6 +836,10 @@
 
   // 표준 자기상관(autocorrelation) 기반 피치 검출.
   // 조용한 소리도 잘 잡히도록, 분석 전에 입력을 자동으로 정규화(증폭)한다.
+  // 바람/선풍기 소리처럼 특정 음높이가 없는 잡음은 자기상관 피크가 뚜렷하지 않으므로,
+  // "또렷함(clarity)"이 이 값보다 낮으면 음으로 인정하지 않고 무시한다. (0~1, 클수록 더 엄격하게 걸러냄)
+  const NOISE_CLARITY_THRESHOLD = 0.35;
+
   function autoCorrelate(buf, sampleRate){
     const SIZE = buf.length;
 
@@ -971,6 +878,22 @@
     }
     if(maxPos <= 0 || maxPos >= n - 1) return -1;
 
+    // 옥타브 오류 보정: 피아노처럼 2배음(한 옥타브 위 주파수)이 강한 소리는
+    // 자기상관 피크가 진짜 기본 주파수(더 큰 lag)가 아니라 그 절반 lag(한 옥타브 위)에서
+    // 더 크게 나올 때가 있다. 그럴 경우 더 큰 lag(한 옥타브 아래) 쪽 상관값도 충분히
+    // 크다면(=진짜 주기일 가능성이 높다면) 그쪽을 기본 주파수로 우선한다.
+    const OCTAVE_DOWN_RATIO = 0.85; // 이 비율 이상이면 한 옥타브 아래를 진짜 음으로 판단
+    const octaveDownPos = maxPos * 2;
+    if(octaveDownPos < n - 1 && c[octaveDownPos] >= maxVal * OCTAVE_DOWN_RATIO){
+      maxPos = octaveDownPos;
+      maxVal = c[octaveDownPos];
+    }
+
+    // 또렷함(clarity) = 검출된 주기 위치의 자기상관 값 / 신호 전체 에너지(lag=0 값)
+    // 뚜렷한 음(현을 뜯은 소리)은 이 값이 크고, 바람/선풍기 같은 비주기적 잡음은 작다.
+    const clarity = maxVal / (c[0] || 1e-9);
+    if(clarity < NOISE_CLARITY_THRESHOLD) return -1;
+
     // 포물선 보간으로 더 정밀한 주기 추정
     const x1 = c[maxPos - 1], x2 = c[maxPos], x3 = c[maxPos + 1];
     const a = (x1 + x3 - 2 * x2) / 2;
@@ -998,11 +921,22 @@
   function tunerLoop(){
     if(!tunerActive) return;
     analyser.getFloatTimeDomainData(tunerTimeData);
+
+    // 이번 프레임 신호의 크기(피크 진폭) - 지금 울리는 소리 안에서 "가장 큰 순간"을 찾는 데 쓴다
+    let frameAmp = 0;
+    for(let i = 0; i < tunerTimeData.length; i++){
+      const a = Math.abs(tunerTimeData[i]);
+      if(a > frameAmp) frameAmp = a;
+    }
+
     const freq = autoCorrelate(tunerTimeData, audioCtx.sampleRate);
 
     if(freq > 0 && freq < 2000){
       const targetFreq = midiToFreq(currentTargetMidi());
-      const cents = 1200 * Math.log2(freq / targetFreq);
+      // 옥타브 오류(정확한 음인데 1옥타브 위/아래로 잘못 잡히는 것)를 없애기 위해
+      // 목표음과 가장 가까운 옥타브로 감지된 주파수를 접어서 비교한다.
+      const tuningFreq = snapToNearestOctave(freq, targetFreq);
+      const cents = 1200 * Math.log2(tuningFreq / targetFreq);
       const clamped = clamp(cents, -50, 50);
       const pct = 50 + (clamped / 50) * 50; // 0~100%
       tunerNeedle.style.left = pct + '%';
@@ -1020,27 +954,30 @@
         statusText = cents > 0 ? '많이 높아요 ♯' : '많이 낮아요 ♭';
       }
       tunerStatus.textContent = statusText;
-      tunerFreq.textContent = freq.toFixed(1) + ' Hz';
+      tunerFreq.textContent = tuningFreq.toFixed(1) + ' Hz';
       tunerCents.textContent = (cents > 0 ? '+' : '') + cents.toFixed(0) + ' ¢';
 
-      const nearest = nearestPentatonicNote(freq, parseInt(keySelect.value, 10));
-      tunerDetected.textContent = `감지된 음: ${SOLFEGE[nearest.degIdx]} (${midiToLabel(nearest.midi)})`;
+      // 감지된 계이름은 이번 소리에서 "가장 컸던 순간"의 값만 사용한다.
+      // 음이 잦아들면서 배음 균형이 바뀌어 다른 음처럼 잘못 잡히더라도,
+      // 이미 더 큰 진폭에서 확정된 계이름이 있으면 그걸 그대로 유지한다.
+      if(frameAmp >= noteHoldPeakAmp){
+        noteHoldPeakAmp = frameAmp;
+        const nearest = nearestPentatonicNote(freq, parseInt(keySelect.value, 10));
+        noteHoldText = `감지된 음: ${SOLFEGE[nearest.degIdx]} (${midiToLabel(nearest.midi)})`;
+      }
+      if(noteHoldText) tunerDetected.textContent = noteHoldText;
     } else {
-      // 소리가 끊겨도 바늘·상태·감지된 음을 초기화하지 않는다 -
-      // 마지막으로 감지된 상태를 그대로 유지하고, 새 소리가 잡히거나
-      // '초기화' 버튼을 누를 때만 바뀐다.
+      // 무음 구간: 바늘·상태·감지된 음 표시는 그대로 유지하되(초기화 버튼을 눌러야 바뀜),
+      // 다음에 새 소리가 들어오면 그걸 새로운 소리의 시작으로 보도록 기준만 초기화한다.
+      noteHoldPeakAmp = 0;
     }
 
     tunerRAF = requestAnimationFrame(tunerLoop);
   }
 
   async function startTuner(){
-    // 마이크 연결/권한 여부와 상관없이 조율 창은 항상 먼저 연다
+    // 마이크 연결/권한 여부와 상관없이 조율 창은 항상 열려 있다
     tunerActive = true;
-    btnTuning.classList.add('active');
-    btnTuning.textContent = '🎙 조율 중지';
-    tunerPanel.hidden = false;
-    tunerTargetPicked = false; // 열 때마다 안내 문구부터 다시 보여줌
     updateTunerTarget();
 
     const MIC_ISSUE_MSG = '마이크 연결 및 권한 수락 상태를 확인해 주세요';
@@ -1083,24 +1020,8 @@
     }
   }
 
-  function stopTuner(){
-    tunerActive = false;
-    if(tunerRAF) cancelAnimationFrame(tunerRAF);
-    if(micStream) micStream.getTracks().forEach(t => t.stop());
-    if(micSource) micSource.disconnect();
-    if(analyser) analyser.disconnect();
-    micStream = null; micSource = null; analyser = null;
-
-    btnTuning.classList.remove('active');
-    btnTuning.textContent = '🎙 조율';
-    tunerPanel.hidden = true;
-    tunerDetected.textContent = '감지된 음: -';
-  }
-
-  btnTuning.addEventListener('click', () => {
-    if(tunerActive) stopTuner();
-    else startTuner();
-  });
+  // 별도의 '조율' 버튼 없이, 페이지가 열리면 바로 조율 창이 활성화된다.
+  startTuner();
 
 })();
 </script>
