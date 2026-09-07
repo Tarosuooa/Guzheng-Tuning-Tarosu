@@ -838,15 +838,46 @@
   // 조용한 소리도 잘 잡히도록, 분석 전에 입력을 자동으로 정규화(증폭)한다.
   // 바람/선풍기 소리처럼 특정 음높이가 없는 잡음은 자기상관 피크가 뚜렷하지 않으므로,
   // "또렷함(clarity)"이 이 값보다 낮으면 음으로 인정하지 않고 무시한다. (0~1, 클수록 더 엄격하게 걸러냄)
-  const NOISE_CLARITY_THRESHOLD = 0.35;
+  const NOISE_CLARITY_THRESHOLD = 0.5;
+
+  // TV·선풍기처럼 계속 이어지는 배경 소음은 크기가 비교적 일정하다.
+  // 최근 배경 소음 수준(ambient floor)을 천천히 추적해두고, 그보다 훨씬 크게
+  // "갑자기 튀는" 소리만 진짜 현을 뜯은 소리로 인정한다 (사람 말소리도 대부분 여기서 걸러짐).
+  let ambientFloor = 0.02;
+  const ONSET_RATIO = 2.2; // 배경 소음보다 이만큼 더 커야 "새로 뜯은 소리"로 인정
+  const FLOOR_RISE_RATE = 0.02;  // 배경이 커질 때 floor를 따라 올리는 속도(느리게)
+  const FLOOR_FALL_RATE = 0.06;  // 배경이 작아질 때 floor를 따라 내리는 속도(조금 더 빠르게)
+
+  function hannWindow(arr){
+    const n = arr.length;
+    if(n < 2) return arr;
+    const out = new Float32Array(n);
+    for(let i = 0; i < n; i++){
+      const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+      out[i] = arr[i] * w;
+    }
+    return out;
+  }
 
   function autoCorrelate(buf, sampleRate){
     const SIZE = buf.length;
 
-    // 1) 진짜 무음인지 걸러낸다 (원래 기준보다 약간만 더 민감하게)
+    // 1) 진짜 무음인지 걸러낸다
     let peak = 0;
     for(let i = 0; i < SIZE; i++){ const a = Math.abs(buf[i]); if(a > peak) peak = a; }
+
+    // 배경 소음 수준을 천천히 갱신 (현재 소리가 지금까지의 floor보다 작으면 빠르게 따라 내려가고,
+    // floor보다 큰 소리가 계속 들어오면 그 소리 자체가 새 배경일 수 있으니 아주 느리게만 따라 올린다)
+    if(peak < ambientFloor){
+      ambientFloor += (peak - ambientFloor) * FLOOR_FALL_RATE;
+    } else {
+      ambientFloor += (peak - ambientFloor) * FLOOR_RISE_RATE;
+    }
+    ambientFloor = Math.max(0.006, ambientFloor);
+
     if(peak < 0.012) return -1;
+    // 배경 소음보다 충분히 튀지 않으면(=계속 이어지는 TV·선풍기·말소리 수준이면) 무시
+    if(peak < ambientFloor * ONSET_RATIO) return -1;
 
     // 2) 자동 게인: 작은 소리를 살짝만 보정 (최대 3배까지) - 과하게 증폭하지 않음
     const gain = Math.min(3, 0.8 / peak);
@@ -858,9 +889,10 @@
     for(let i = 0; i < SIZE / 2; i++){ if(Math.abs(norm[i]) < thres){ r1 = i; break; } }
     for(let i = 1; i < SIZE / 2; i++){ if(Math.abs(norm[SIZE - i]) < thres){ r2 = SIZE - i; break; } }
 
-    const trimmed = norm.slice(r1, r2);
+    let trimmed = norm.slice(r1, r2);
     const n = trimmed.length;
     if(n < 8) return -1;
+    trimmed = hannWindow(trimmed); // 창함수로 경계 왜곡을 줄여 주파수 추정 정확도를 높인다
 
     const c = new Float32Array(n);
     for(let lag = 0; lag < n; lag++){
@@ -1006,10 +1038,26 @@
 
       const ctx = getAudioCtx();
       micSource = ctx.createMediaStreamSource(micStream);
+
+      // 고쟁의 실제 음역대(약 65Hz~1300Hz) 밖의 소리를 미리 걸러낸다.
+      // 선풍기·에어컨 저음 웅웅거림, 방 울림 저음은 하이패스로,
+      // TV 고음·쉬익거리는 잡음은 로우패스로 줄여서 분석 전에 신호를 정리한다.
+      const micHighpass = ctx.createBiquadFilter();
+      micHighpass.type = 'highpass';
+      micHighpass.frequency.value = 55;
+      micHighpass.Q.value = 0.7;
+      const micLowpass = ctx.createBiquadFilter();
+      micLowpass.type = 'lowpass';
+      micLowpass.frequency.value = 1600;
+      micLowpass.Q.value = 0.7;
+
       analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = 4096; // 더 넓은 분석 창 - 특히 저음 현의 정확도가 좋아짐
       tunerTimeData = new Float32Array(analyser.fftSize);
-      micSource.connect(analyser); // destination에는 연결하지 않음 - 마이크 소리를 스피커로 내보내지 않음
+
+      micSource.connect(micHighpass);
+      micHighpass.connect(micLowpass);
+      micLowpass.connect(analyser); // destination에는 연결하지 않음 - 마이크 소리를 스피커로 내보내지 않음
 
       tunerStatus.textContent = '고쟁 현을 뜯어 소리를 들려주세요';
       tunerLoop();
