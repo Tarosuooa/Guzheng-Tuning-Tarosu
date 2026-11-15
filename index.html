@@ -148,6 +148,18 @@
   }
   .tuner-reset-btn:hover{ color:var(--cream); border-color:var(--gold); }
   .tuner-reset-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .tuner-select-row{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:14px; }
+  .tuner-select-center{ flex:1; max-width:300px; min-width:0; }
+  .tuner-select-center .tuner-target, .tuner-select-center .tuner-target-placeholder{ margin-bottom:0; }
+  .tuner-arrow-btn{
+    flex:0 0 auto; width:40px; height:40px; border-radius:50%;
+    background:transparent; color:var(--gold); border:1px solid var(--gold);
+    font-size:15px; cursor:pointer; line-height:1; padding:0;
+    transition:background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  }
+  .tuner-arrow-btn:hover:not(:disabled){ background:var(--gold); color:#1a120a; }
+  .tuner-arrow-btn:disabled{ opacity:0.3; cursor:default; }
+  .tuner-arrow-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
   .tuner-target{
     display:flex; align-items:baseline; justify-content:center; gap:10px;
     margin-bottom:14px;
@@ -319,12 +331,18 @@
 
 <div class="tuner-panel" id="tunerPanel">
   <button type="button" class="tuner-reset-btn" id="btnResetDetected">초기화</button>
-  <div class="tuner-target" id="tunerTargetRow">
-    <span class="tuner-target-solfege" id="tunerSolfege">도</span>
-    <span class="tuner-target-note" id="tunerNote">C4</span>
-    <span class="tuner-target-freq" id="tunerTargetFreq">261.6 Hz</span>
+  <div class="tuner-select-row">
+    <button type="button" class="tuner-arrow-btn" id="btnSelPrev" aria-label="바로 위의 현 선택">◀</button>
+    <div class="tuner-select-center">
+      <div class="tuner-target" id="tunerTargetRow">
+        <span class="tuner-target-solfege" id="tunerSolfege">도</span>
+        <span class="tuner-target-note" id="tunerNote">C4</span>
+        <span class="tuner-target-freq" id="tunerTargetFreq">261.6 Hz</span>
+      </div>
+      <div class="tuner-target-placeholder" id="tunerTargetPlaceholder">조율을 원하시는 음의 현을 선택해 주세요</div>
+    </div>
+    <button type="button" class="tuner-arrow-btn" id="btnSelNext" aria-label="바로 아래의 현 선택">▶</button>
   </div>
-  <div class="tuner-target-placeholder" id="tunerTargetPlaceholder">조율을 원하시는 음의 현을 선택해 주세요</div>
   <div class="tuner-detected" id="tunerDetected">감지된 음: -</div>
 
   <div class="tuner-meter">
@@ -718,6 +736,15 @@
   selectString(0, false);
   updateIdxDisplay();
 
+  function updateArrowButtons(){
+    const btnSelPrev = document.getElementById('btnSelPrev');
+    const btnSelNext = document.getElementById('btnSelNext');
+    btnSelPrev.disabled = selectedIndex <= lowerBound();
+    btnSelNext.disabled = selectedIndex >= STRING_COUNT - 1;
+  }
+  document.getElementById('btnSelPrev').addEventListener('click', () => selectString(Math.max(lowerBound(), selectedIndex - 1)));
+  document.getElementById('btnSelNext').addEventListener('click', () => selectString(Math.min(STRING_COUNT - 1, selectedIndex + 1)));
+
   function pluck(i){
     const midi = tuning[i] + semitoneOffsets[i];
     playNote(midiToFreq(midi));
@@ -820,6 +847,7 @@
 
   function updateTunerTarget(){
     if(!tunerSolfege) return; // guard: called before DOM refs exist during initial refresh()
+    updateArrowButtons();
     if(!tunerTargetPicked){
       tunerTargetRow.style.display = 'none';
       tunerTargetPlaceholder.style.display = 'block';
