@@ -148,11 +148,11 @@
   }
   .tuner-reset-btn:hover{ color:var(--cream); border-color:var(--gold); }
   .tuner-reset-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
-  .tuner-select-row{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:14px; }
-  .tuner-select-center{ flex:1; max-width:300px; min-width:0; }
+  .tuner-select-row{ display:flex; align-items:center; justify-content:center; gap:4px; margin:26px auto 14px; max-width:260px; }
+  .tuner-select-center{ flex:1; min-width:0; }
   .tuner-select-center .tuner-target, .tuner-select-center .tuner-target-placeholder{ margin-bottom:0; }
   .tuner-arrow-btn{
-    flex:0 0 auto; width:40px; height:40px; border-radius:50%;
+    flex:0 0 auto; width:34px; height:34px; border-radius:50%;
     background:transparent; color:var(--gold); border:1px solid var(--gold);
     font-size:15px; cursor:pointer; line-height:1; padding:0;
     transition:background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
@@ -723,13 +723,13 @@
   }
   refresh();
 
-  function selectString(i, userInitiated = true){
+  function selectString(i, userInitiated = true, scroll = true){
     stringEls[selectedIndex].btn.classList.remove('selected');
     selectedIndex = i;
     const btn = stringEls[selectedIndex].btn;
     btn.classList.add('selected');
     btn.focus({preventScroll:true}); // keep real DOM focus in sync with the visual highlight
-    btn.scrollIntoView({block:'nearest', behavior:'smooth'});
+    if(scroll) btn.scrollIntoView({block:'nearest', behavior:'smooth'});
     if(userInitiated) tunerTargetPicked = true;
     updateTunerTarget();
   }
@@ -742,8 +742,8 @@
     btnSelPrev.disabled = selectedIndex <= lowerBound();
     btnSelNext.disabled = selectedIndex >= STRING_COUNT - 1;
   }
-  document.getElementById('btnSelPrev').addEventListener('click', () => selectString(Math.max(lowerBound(), selectedIndex - 1)));
-  document.getElementById('btnSelNext').addEventListener('click', () => selectString(Math.min(STRING_COUNT - 1, selectedIndex + 1)));
+  document.getElementById('btnSelPrev').addEventListener('click', () => selectString(Math.max(lowerBound(), selectedIndex - 1), true, false));
+  document.getElementById('btnSelNext').addEventListener('click', () => selectString(Math.min(STRING_COUNT - 1, selectedIndex + 1), true, false));
 
   function pluck(i){
     const midi = tuning[i] + semitoneOffsets[i];
